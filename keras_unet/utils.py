@@ -2,11 +2,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from keras_unet import TF
-
 if TF:
     from tensorflow.keras.preprocessing.image import ImageDataGenerator
 else:
     from keras.preprocessing.image import ImageDataGenerator
+
+MASK_COLORS = [
+    "red", "green", "blue",
+    "yellow", "magenta", "cyan"
+]
 
 
 # Runtime data augmentation
@@ -28,6 +32,20 @@ def get_augmented(
         fill_mode="constant",
     ),
 ):
+    """[summary]
+    
+    Args:
+        X_train (numpy.ndarray): [description]
+        Y_train (numpy.ndarray): [description]
+        X_val (numpy.ndarray, optional): [description]. Defaults to None.
+        Y_val (numpy.ndarray, optional): [description]. Defaults to None.
+        batch_size (int, optional): [description]. Defaults to 32.
+        seed (int, optional): [description]. Defaults to 0.
+        data_gen_args ([type], optional): [description]. Defaults to dict(rotation_range=10.0,# width_shift_range=0.02,height_shift_range=0.02,shear_range=5,# zoom_range=0.3,horizontal_flip=True,vertical_flip=False,fill_mode="constant",).
+    
+    Returns:
+        [type]: [description]
+    """
 
     # Train data, provide the same seed and keyword arguments to the fit and flow methods
     X_datagen = ImageDataGenerator(**data_gen_args)
@@ -65,6 +83,13 @@ def get_augmented(
 
 
 def plot_segm_history(history, metrics=["iou", "val_iou"], losses=["loss", "val_loss"]):
+    """[summary]
+    
+    Args:
+        history ([type]): [description]
+        metrics (list, optional): [description]. Defaults to ["iou", "val_iou"].
+        losses (list, optional): [description]. Defaults to ["loss", "val_loss"].
+    """
     # summarize history for iou
     plt.figure(figsize=(12, 6))
     for metric in metrics:
@@ -93,6 +118,12 @@ def mask_to_red(mask):
     """
     Converts binary segmentation mask from white to red color.
     Also adds alpha channel to make black background transparent.
+    
+    Args:
+        mask (numpy.ndarray): [description]
+    
+    Returns:
+        numpy.ndarray: [description]
     """
     img_size = mask.shape[0]
     c1 = mask.reshape(img_size, img_size)
@@ -106,10 +137,21 @@ def mask_to_rgba(mask, color="red"):
     """
     Converts binary segmentation mask from white to red color.
     Also adds alpha channel to make black background transparent.
-    """
-    img_size = mask.shape[0]
-    zeros = np.zeros((img_size, img_size))
-    ones = mask.reshape(img_size, img_size)
+    
+    Args:
+        mask (numpy.ndarray): [description]
+        color (str, optional): Check `MASK_COLORS` for available colors. Defaults to "red".
+    
+    Returns:
+        numpy.ndarray: [description]
+    """    
+    assert(color in MASK_COLORS)
+    assert(mask.ndim==3 or mask.ndim==2)
+
+    h = mask.shape[0]
+    w = mask.shape[1]
+    zeros = np.zeros((h, w))
+    ones = mask.reshape(h, w)
     if color == "red":
         return np.stack((ones, zeros, zeros, ones), axis=-1)
     elif color == "green":
@@ -137,7 +179,18 @@ def plot_imgs(
     Image plotting for semantic segmentation data.
     Last column is always an overlay of ground truth or prediction
     depending on what was provided as arguments.
+    
+    Args:
+        org_imgs (numpy.ndarray): [description]
+        mask_imgs (numpy.ndarray): [description]
+        pred_imgs (numpy.ndarray, optional): [description]. Defaults to None.
+        nm_img_to_plot (int, optional): [description]. Defaults to 10.
+        figsize (int, optional): [description]. Defaults to 4.
+        alpha (float, optional): [description]. Defaults to 0.5.
+        color (str, optional): [description]. Defaults to "red".
     """
+    assert(color in MASK_COLORS)
+
     if nm_img_to_plot > org_imgs.shape[0]:
         nm_img_to_plot = org_imgs.shape[0]
     im_id = 0
@@ -196,12 +249,29 @@ def plot_imgs(
 
 
 def zero_pad_mask(mask, desired_size):
+    """[summary]
+    
+    Args:
+        mask (numpy.ndarray): [description]
+        desired_size ([type]): [description]
+    
+    Returns:
+        numpy.ndarray: [description]
+    """
     pad = (desired_size - mask.shape[0]) // 2
     padded_mask = np.pad(mask, pad, mode="constant")
     return padded_mask
 
 
 def reshape_arr(arr):
+    """[summary]
+    
+    Args:
+        arr (numpy.ndarray): [description]
+    
+    Returns:
+        numpy.ndarray: [description]
+    """
     if arr.ndim == 3:
         return arr
     elif arr.ndim == 4:
@@ -212,6 +282,14 @@ def reshape_arr(arr):
 
 
 def get_cmap(arr):
+    """[summary]
+    
+    Args:
+        arr (numpy.ndarray): [description]
+    
+    Returns:
+        string: [description]
+    """
     if arr.ndim == 3:
         return "gray"
     elif arr.ndim == 4:
@@ -226,7 +304,19 @@ def get_patches(img_arr, size=256, stride=256):
     Takes single image or array of images and returns
     crops using sliding window method.
     If stride < size it will do overlapping.
-    """
+    
+    Args:
+        img_arr (numpy.ndarray): [description]
+        size (int, optional): [description]. Defaults to 256.
+        stride (int, optional): [description]. Defaults to 256.
+    
+    Raises:
+        ValueError: [description]
+        ValueError: [description]
+    
+    Returns:
+        numpy.ndarray: [description]
+    """    
     # check size and stride
     if size % stride != 0:
         raise ValueError("size % stride must be equal 0")
@@ -245,7 +335,8 @@ def get_patches(img_arr, size=256, stride=256):
                 # print(j*stride, j*stride+size)
                 patches_list.append(
                     img_arr[
-                        i * stride : i * stride + size, j * stride : j * stride + size
+                        i * stride : i * stride + size,
+                        j * stride : j * stride + size
                     ]
                 )
 
@@ -272,6 +363,15 @@ def get_patches(img_arr, size=256, stride=256):
 def plot_patches(img_arr, org_img_size, stride=None, size=None):
     """
     Plots all the patches for the first image in 'img_arr' trying to reconstruct the original image
+
+    Args:
+        img_arr (numpy.ndarray): [description]
+        org_img_size (tuple): [description]
+        stride ([type], optional): [description]. Defaults to None.
+        size ([type], optional): [description]. Defaults to None.
+    
+    Raises:
+        ValueError: [description]
     """
 
     # check parameters
@@ -301,6 +401,20 @@ def plot_patches(img_arr, org_img_size, stride=None, size=None):
 
 
 def reconstruct_from_patches(img_arr, org_img_size, stride=None, size=None):
+    """[summary]
+    
+    Args:
+        img_arr (numpy.ndarray): [description]
+        org_img_size (tuple): [description]
+        stride ([type], optional): [description]. Defaults to None.
+        size ([type], optional): [description]. Defaults to None.
+    
+    Raises:
+        ValueError: [description]
+    
+    Returns:
+        numpy.ndarray: [description]
+    """
     # check parameters
     if type(org_img_size) is not tuple:
         raise ValueError("org_image_size must be a tuple")
